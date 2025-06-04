@@ -1,2 +1,1 @@
-# Springer-Capital
-Internship purpose
+# README.md
