@@ -1,9 +1,11 @@
 # urls.py
-from django.contrib import admin
 from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import AttendanceViewSet
+
+router = DefaultRouter()
+router.register(r'attendance', AttendanceViewSet)
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('api/', include('employees.urls')),  # Include employee app URLs
-    path('api/', include('attendance.urls')),  # Include attendance app URLs
+    path('', include(router.urls)),
 ]
