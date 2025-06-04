@@ -1,0 +1,287 @@
+# charts.html
+<!DOCTYPE html>
+<html lang="en" >
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Advanced Employee Management Charts</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --clr-bg-light: #f9fafb;
+      --clr-bg-dark: #121212;
+      --clr-text-light: #333;
+      --clr-text-dark: #eee;
+      --clr-accent: #3498db;
+      --clr-success: #2ecc71;
+      --clr-danger: #e74c3c;
+      --clr-warning: #f1c40f;
+    }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      background: var(--clr-bg-light);
+      color: var(--clr-text-light);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem;
+      transition: background 0.3s, color 0.3s;
+    }
+    body.dark {
+      background: var(--clr-bg-dark);
+      color: var(--clr-text-dark);
+    }
+    h1 {
+      font-weight: 700;
+      margin-bottom: 2rem;
+      text-align: center;
+    }
+    .btn-theme-toggle {
+      background: var(--clr-accent);
+      color: white;
+      border: none;
+      padding: 0.5rem 1.5rem;
+      border-radius: 20px;
+      cursor: pointer;
+      font-weight: 600;
+      margin-bottom: 2rem;
+      transition: background 0.3s;
+    }
+    .btn-theme-toggle:hover {
+      background: #2980b9;
+    }
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 3rem;
+      width: 100%;
+      max-width: 1000px;
+    }
+    .chart-card {
+      background: white;
+      border-radius: 12px;
+      padding: 1.5rem 2rem;
+      box-shadow: 0 12px 24px rgba(0,0,0,0.1);
+      position: relative;
+      transition: background 0.3s, color 0.3s;
+    }
+    body.dark .chart-card {
+      background: #1f1f1f;
+      color: var(--clr-text-dark);
+      box-shadow: 0 12px 24px rgba(255,255,255,0.1);
+    }
+    .chart-card h2 {
+      margin-top: 0;
+      margin-bottom: 1rem;
+    }
+    canvas {
+      width: 100% !important;
+      height: 350px !important;
+    }
+    .loading-spinner {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      border: 5px solid #eee;
+      border-top: 5px solid var(--clr-accent);
+      border-radius: 50%;
+      width: 3rem;
+      height: 3rem;
+      animation: spin 1s linear infinite;
+      z-index: 10;
+    }
+    .error-msg {
+      color: var(--clr-danger);
+      text-align: center;
+      font-weight: 600;
+      margin-top: 2rem;
+    }
+
+    @keyframes spin {
+      0% { transform: translate(-50%, -50%) rotate(0deg);}
+      100% { transform: translate(-50%, -50%) rotate(360deg);}
+    }
+  </style>
+</head>
+<body>
+  <h1>Employee Management Dashboard</h1>
+  <button class="btn-theme-toggle" aria-label="Toggle Dark/Light Theme">Toggle Theme</button>
+  <div class="charts-grid">
+    <section aria-label="Employees Per Department Chart" class="chart-card" id="deptChartContainer">
+      <h2>Employees Per Department</h2>
+      <div class="loading-spinner" id="deptLoading"></div>
+      <canvas id="deptPieChart" aria-label="Pie chart showing number of employees per department" role="img"></canvas>
+      <div class="error-msg" id="deptError" role="alert" aria-live="assertive"></div>
+    </section>
+
+    <section aria-label="Monthly Attendance Overview Chart" class="chart-card" id="attendanceChartContainer">
+      <h2>Monthly Attendance Overview</h2>
+      <div class="loading-spinner" id="attendanceLoading"></div>
+      <canvas id="attendanceBarChart" aria-label="Stacked bar chart showing attendance overview per month" role="img"></canvas>
+      <div class="error-msg" id="attendanceError" role="alert" aria-live="assertive"></div>
+    </section>
+  </div>
+
+  <script>
+    (() => {
+      // Theme toggle logic
+      const btnToggle = document.querySelector('.btn-theme-toggle');
+      btnToggle.addEventListener('click', () => {
+        document.body.classList.toggle('dark');
+      });
+
+      // Chart instances stored for reference
+      let deptPieChart = null;
+      let attendanceBarChart = null;
+
+      // Utility to create pie chart
+      function createDeptPieChart(ctx, data) {
+        return new Chart(ctx, {
+          type: 'pie',
+          data: {
+            labels: data.labels,
+            datasets: [{
+              data: data.values,
+              backgroundColor: ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6'],
+              borderColor: '#fff',
+              borderWidth: 2,
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: {
+                position: 'bottom',
+                labels: { font: { size: 14 }, color: getComputedStyle(document.body).color },
+              },
+              tooltip: {
+                callbacks: {
+                  label: ctx => {
+                    let value = ctx.parsed;
+                    let sum = ctx.chart._metasets[ctx.datasetIndex].total;
+                    let percent = ((value / sum) * 100).toFixed(2);
+                    return `${ctx.label}: ${value} (${percent}%)`;
+                  }
+                }
+              }
+            }
+          }
+        });
+      }
+
+      // Utility to create stacked bar chart
+      function createAttendanceBarChart(ctx, data) {
+        return new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: data.labels,
+            datasets: [
+              {
+                label: 'Present',
+                data: data.present,
+                backgroundColor: '#2ecc71',
+                stack: 'attendance'
+              },
+              {
+                label: 'Absent',
+                data: data.absent,
+                backgroundColor: '#e74c3c',
+                stack: 'attendance'
+              },
+              {
+                label: 'Late',
+                data: data.late,
+                backgroundColor: '#f1c40f',
+                stack: 'attendance'
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            scales: {
+              x: { stacked: true, ticks: { color: getComputedStyle(document.body).color } },
+              y: {
+                stacked: true,
+                beginAtZero: true,
+                title: {
+                  display: true,
+                  text: 'Count',
+                  color: getComputedStyle(document.body).color
+                },
+                ticks: { color: getComputedStyle(document.body).color },
+              }
+            },
+            plugins: {
+              legend: {
+                position: 'bottom',
+                labels: { font: { size: 14 }, color: getComputedStyle(document.body).color }
+              },
+              tooltip: {
+                mode: 'index',
+                intersect: false,
+                callbacks: {
+                  label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y}`
+                }
+              }
+            }
+          }
+        });
+      }
+
+      // Function to fetch JSON data with error handling
+      async function fetchData(url, onSuccess, onError, loadingEl) {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) throw new Error(`Server error ${res.status}`);
+          const data = await res.json();
+          onSuccess(data);
+        } catch (e) {
+          onError(e);
+        } finally {
+          loadingEl.style.display = 'none';
+        }
+      }
+
+      // Populate department pie chart
+      const deptCanvas = document.getElementById('deptPieChart');
+      const deptLoading = document.getElementById('deptLoading');
+      const deptError = document.getElementById('deptError');
+
+      fetchData(
+        '/api/employee-count/', // Replace with your real API endpoint
+        data => {
+          deptError.textContent = '';
+          if (deptPieChart) deptPieChart.destroy();
+          deptPieChart = createDeptPieChart(deptCanvas.getContext('2d'), data);
+        },
+        err => {
+          deptError.textContent = `Failed to load department data: ${err.message}`;
+        },
+        deptLoading
+      );
+
+      // Populate attendance bar chart
+      const attendanceCanvas = document.getElementById('attendanceBarChart');
+      const attendanceLoading = document.getElementById('attendanceLoading');
+      const attendanceError = document.getElementById('attendanceError');
+
+      fetchData(
+        '/api/attendance-summary/', // Replace with your real API endpoint
+        data => {
+          attendanceError.textContent = '';
+          if(attendanceBarChart) attendanceBarChart.destroy();
+          attendanceBarChart = createAttendanceBarChart(attendanceCanvas.getContext('2d'), data);
+        },
+        err => {
+          attendanceError.textContent = `Failed to load attendance data: ${err.message}`;
+        },
+        attendanceLoading
+      );
+
+    })();
+  </script>
+</body>
+</html>
